@@ -1,4 +1,3 @@
-
 import * as SQLite from 'expo-sqlite';
 
 const db = SQLite.openDatabaseSync('chatApp.db');
@@ -8,7 +7,8 @@ export const createTables = () => {
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT, 
       username TEXT UNIQUE, 
-      password TEXT
+      password TEXT,
+      profile_pic TEXT DEFAULT 'maria'
     );
   `);
   
@@ -21,6 +21,18 @@ export const createTables = () => {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+};
+
+// NEW FUNCTION: Add profile_pic column to existing database
+export const addProfilePicColumn = () => {
+  try {
+    db.execSync(`ALTER TABLE users ADD COLUMN profile_pic TEXT DEFAULT 'maria';`);
+    console.log('Profile pic column added successfully!');
+    return { success: true };
+  } catch (error) {
+    console.log('Column might already exist or error:', error.message);
+    return { success: false };
+  }
 };
 
 export const insertUser = (username, password) => {
@@ -48,6 +60,33 @@ export const getUserByUsername = (username) => {
   } catch (error) {
     console.error('Error getting user:', error);
     return null;
+  }
+};
+
+// Get user with profile picture
+export const getUserWithProfilePic = (username) => {
+  try {
+    return db.getFirstSync(
+      'SELECT username, profile_pic FROM users WHERE username = ?',
+      [username]
+    );
+  } catch (error) {
+    console.error('Error getting user profile:', error);
+    return null;
+  }
+};
+
+// Update profile picture
+export const updateUserProfilePic = (username, profilePic) => {
+  try {
+    db.runSync(
+      'UPDATE users SET profile_pic = ? WHERE username = ?',
+      [profilePic, username]
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating profile pic:', error);
+    return { success: false, error: error.message };
   }
 };
 

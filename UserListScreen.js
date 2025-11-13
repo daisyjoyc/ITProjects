@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
 import { getAllUsers, deleteUser } from './database';
 
 export default function UserListScreen({ route, navigation }) {
@@ -63,17 +63,24 @@ export default function UserListScreen({ route, navigation }) {
     );
   };
 
+  const getProfileImage = (profilePic) => {
+    if (profilePic && profilePic.startsWith('file://')) {
+      return { uri: profilePic };
+    }
+    // Default placeholder if no image
+    return require('./assets/adaptive-icon.png');
+  };
+
   const renderUser = ({ item }) => (
     <TouchableOpacity 
       style={styles.userCard} 
       onPress={() => handleUserPress(item)}
       onLongPress={() => handleDeleteUser(item)}
     >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {item.username.charAt(0).toUpperCase()}
-        </Text>
-      </View>
+      <Image 
+        source={getProfileImage(item.profile_pic)} 
+        style={styles.avatar}
+      />
       <View style={styles.userInfo}>
         <Text style={styles.username}>{item.username}</Text>
         <Text style={styles.subtitle}>Tap to chat • Hold to delete</Text>
@@ -174,15 +181,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: 15,
-  },
-  avatarText: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: 'bold',
   },
   userInfo: {
     flex: 1,

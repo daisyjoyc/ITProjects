@@ -1,10 +1,34 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
-import { insertUser } from './database';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, Image } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { insertUser, updateUserProfilePic } from './database';
 
 export default function SignupScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [profileImage, setProfileImage] = useState(null);
+
+  const pickImage = async () => {
+    // Request permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'We need camera roll permissions to select a profile picture');
+      return;
+    }
+
+    // Launch image picker
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      setProfileImage(result.assets[0].uri);
+    }
+  };
 
   const handleSignup = () => {
     if (!username || !password) {
@@ -15,11 +39,17 @@ export default function SignupScreen({ navigation }) {
     const result = insertUser(username, password);
     
     if (result.success) {
+      // Save profile picture URI if selected
+      if (profileImage) {
+        updateUserProfilePic(username, profileImage);
+      }
+      
       Alert.alert('Success', 'Account created!', [
         { text: 'OK', onPress: () => navigation.navigate('Login') }
       ]);
       setUsername('');
       setPassword('');
+      setProfileImage(null);
     } else {
       Alert.alert('Error', 'Username already exists or signup failed');
     }
@@ -30,6 +60,24 @@ export default function SignupScreen({ navigation }) {
       <View style={styles.formContainer}>
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>Sign up to get started</Text>
+
+        {/* Profile Picture Selection */}
+        <View style={styles.profilePicContainer}>
+          <TouchableOpacity 
+            style={styles.profilePicButton} 
+            onPress={pickImage}
+          >
+            {profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.profilePic} />
+            ) : (
+              <View style={styles.placeholderPic}>
+                <Text style={styles.placeholderText}>📷</Text>
+                <Text style={styles.placeholderSubtext}>Add Photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.photoHint}>Tap to select profile picture</Text>
+        </View>
         
         <TextInput
           placeholder="Username"
@@ -65,9 +113,9 @@ export default function SignupScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     padding: 20,
+    backgroundColor: '#f5f5f5',
   },
   formContainer: {
     backgroundColor: 'white',
@@ -91,6 +139,42 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 30,
     textAlign: 'center',
+  },
+  profilePicContainer: {
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  profilePicButton: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#007AFF',
+    marginBottom: 10,
+  },
+  profilePic: {
+    width: '100%',
+    height: '100%',
+  },
+  placeholderPic: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    fontSize: 40,
+    marginBottom: 5,
+  },
+  placeholderSubtext: {
+    fontSize: 14,
+    color: '#666',
+  },
+  photoHint: {
+    fontSize: 13,
+    color: '#999',
   },
   input: {
     borderWidth: 1,

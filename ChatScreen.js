@@ -4,23 +4,39 @@ import {
   Text, 
   TextInput, 
   TouchableOpacity, 
-  FlatList, 
+  FlatList,
+  Image,
   StyleSheet,
   KeyboardAvoidingView,
   Platform 
 } from 'react-native';
-import { insertMessage, getMessagesBetweenUsers } from './database';
+import { insertMessage, getMessagesBetweenUsers, getUserWithProfilePic } from './database';
 
 export default function ChatScreen({ route }) {
   const { currentUser, otherUser } = route.params;
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([]);
+  const [currentUserPic, setCurrentUserPic] = useState(null);
+  const [otherUserPic, setOtherUserPic] = useState(null);
 
   useEffect(() => {
     loadMessages();
+    loadProfilePics();
     const interval = setInterval(loadMessages, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  const loadProfilePics = () => {
+    const currentUserData = getUserWithProfilePic(currentUser);
+    const otherUserData = getUserWithProfilePic(otherUser);
+    
+    if (currentUserData?.profile_pic) {
+      setCurrentUserPic(currentUserData.profile_pic);
+    }
+    if (otherUserData?.profile_pic) {
+      setOtherUserPic(otherUserData.profile_pic);
+    }
+  };
 
   const loadMessages = () => {
     const chatMessages = getMessagesBetweenUsers(currentUser, otherUser);
@@ -40,14 +56,31 @@ export default function ChatScreen({ route }) {
     }
   };
 
+  const getProfileImage = (profilePic) => {
+    if (profilePic && profilePic.startsWith('file://')) {
+      return { uri: profilePic };
+    }
+    // Default placeholder if no image
+    return require('./assets/adaptive-icon.png');
+  };
+
   const renderMessage = ({ item }) => {
     const isMyMessage = item.sender === currentUser;
+    const profilePic = isMyMessage ? currentUserPic : otherUserPic;
     
     return (
       <View style={[
         styles.messageContainer,
         isMyMessage ? styles.myMessageContainer : styles.otherMessageContainer
       ]}>
+        {/* Profile Picture - Show on left for other user */}
+        {!isMyMessage && (
+          <Image 
+            source={getProfileImage(profilePic)} 
+            style={styles.profilePic}
+          />
+        )}
+
         <View style={[
           styles.messageBubble,
           isMyMessage ? styles.myMessage : styles.otherMessage
@@ -68,6 +101,14 @@ export default function ChatScreen({ route }) {
             })}
           </Text>
         </View>
+
+        {/* Profile Picture - Show on right for current user */}
+        {isMyMessage && (
+          <Image 
+            source={getProfileImage(profilePic)} 
+            style={styles.profilePic}
+          />
+        )}
       </View>
     );
   };
@@ -79,11 +120,10 @@ export default function ChatScreen({ route }) {
       keyboardVerticalOffset={90}
     >
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {otherUser.charAt(0).toUpperCase()}
-          </Text>
-        </View>
+        <Image 
+          source={getProfileImage(otherUserPic)} 
+          style={styles.headerAvatar}
+        />
         <Text style={styles.headerTitle}>{otherUser}</Text>
       </View>
 
@@ -128,19 +168,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
-  avatar: {
+  headerAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: 12,
-  },
-  avatarText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
   },
   headerTitle: {
     fontSize: 18,
@@ -152,16 +184,24 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
   },
   messageContainer: {
+    flexDirection: 'row',
     marginBottom: 12,
-  },
-  myMessageContainer: {
     alignItems: 'flex-end',
   },
+  myMessageContainer: {
+    justifyContent: 'flex-end',
+  },
   otherMessageContainer: {
-    alignItems: 'flex-start',
+    justifyContent: 'flex-start',
+  },
+  profilePic: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginHorizontal: 8,
   },
   messageBubble: {
-    maxWidth: '75%',
+    maxWidth: '65%',
     padding: 12,
     borderRadius: 16,
   },

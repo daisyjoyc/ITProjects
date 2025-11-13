@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from 'react-native';
-import { checkLogin } from './database';
+import { checkLogin, dropAllTables, createTables } from './database';
 
 export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState('');
@@ -21,6 +21,26 @@ export default function LoginScreen({ navigation }) {
     } else {
       Alert.alert('Error', 'Invalid username or password');
     }
+  };
+
+  // TEMPORARY RESET FUNCTION
+  const handleResetDatabase = () => {
+    Alert.alert(
+      'Reset Database',
+      'This will delete ALL users and messages. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            dropAllTables();
+            createTables();
+            Alert.alert('Success', 'Database reset! You can now create new accounts with profile pictures.');
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -48,6 +68,14 @@ export default function LoginScreen({ navigation }) {
         
         <TouchableOpacity style={styles.button} onPress={handleLogin}>
           <Text style={styles.buttonText}>Login</Text>
+        </TouchableOpacity>
+
+        {/* TEMPORARY RESET BUTTON - Remove this after resetting once */}
+        <TouchableOpacity 
+          style={[styles.button, { backgroundColor: '#FF3B30', marginTop: 10 }]} 
+          onPress={handleResetDatabase}
+        >
+          <Text style={styles.buttonText}>🔄 Reset Database (Fix Profile Pics)</Text>
         </TouchableOpacity>
         
         <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
