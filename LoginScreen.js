@@ -72,10 +72,10 @@ export default function LoginScreen({ navigation }) {
 
         {/* TEMPORARY RESET BUTTON - Remove this after resetting once */}
         <TouchableOpacity 
-          style={[styles.button, { backgroundColor: '#FF3B30', marginTop: 10 }]} 
+          style={[styles.button, { backgroundColor: '#d94941ff', marginTop: 5 }]} 
           onPress={handleResetDatabase}
         >
-          <Text style={styles.buttonText}>🔄 Reset Database (Fix Profile Pics)</Text>
+          <Text style={styles.buttonText}>🔄 Reset</Text>
         </TouchableOpacity>
         
         <TouchableOpacity onPress={() => navigation.navigate('Signup')}>

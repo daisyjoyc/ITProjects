@@ -33,6 +33,12 @@ export default function UserListScreen({ route, navigation }) {
     );
   };
 
+  const handleFeed = () => {
+    navigation.navigate('Feed', {
+      currentUser: currentUser
+    });
+  };
+
   const handleUserPress = (selectedUser) => {
     navigation.navigate('Chat', {
       currentUser: currentUser,
@@ -97,9 +103,14 @@ export default function UserListScreen({ route, navigation }) {
             <Text style={styles.headerTitle}>Chats</Text>
             <Text style={styles.headerSubtitle}>Logged in as: {currentUser}</Text>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity style={styles.feedButton} onPress={handleFeed}>
+              <Text style={styles.feedText}>Feed</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -149,6 +160,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 5,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  feedButton: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  feedText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   logoutButton: {
     backgroundColor: '#FF3B30',

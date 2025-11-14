@@ -21,9 +21,32 @@ export const createTables = () => {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // NEW: Posts table
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT,
+      image_uri TEXT,
+      caption TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // NEW: Comments table
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER,
+      username TEXT,
+      comment TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+    );
+  `);
 };
 
-// NEW FUNCTION: Add profile_pic column to existing database
+// ===== USER FUNCTIONS =====
 export const addProfilePicColumn = () => {
   try {
     db.execSync(`ALTER TABLE users ADD COLUMN profile_pic TEXT DEFAULT 'maria';`);
@@ -63,7 +86,6 @@ export const getUserByUsername = (username) => {
   }
 };
 
-// Get user with profile picture
 export const getUserWithProfilePic = (username) => {
   try {
     return db.getFirstSync(
@@ -76,7 +98,6 @@ export const getUserWithProfilePic = (username) => {
   }
 };
 
-// Update profile picture
 export const updateUserProfilePic = (username, profilePic) => {
   try {
     db.runSync(
@@ -123,6 +144,7 @@ export const updateUserPassword = (username, newPassword) => {
   }
 };
 
+// ===== MESSAGE FUNCTIONS =====
 export const insertMessage = (sender, receiver, message) => {
   try {
     db.runSync(
@@ -230,10 +252,91 @@ export const deleteConversation = (user1, user2) => {
   }
 };
 
+// ===== POST FUNCTIONS =====
+export const createPost = (username, imageUri, caption) => {
+  try {
+    db.runSync(
+      'INSERT INTO posts (username, image_uri, caption) VALUES (?, ?, ?)',
+      [username, imageUri, caption]
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('Error creating post:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getAllPosts = () => {
+  try {
+    return db.getAllSync('SELECT * FROM posts ORDER BY timestamp DESC');
+  } catch (error) {
+    console.error('Error getting posts:', error);
+    return [];
+  }
+};
+
+export const getPostById = (postId) => {
+  try {
+    return db.getFirstSync('SELECT * FROM posts WHERE id = ?', [postId]);
+  } catch (error) {
+    console.error('Error getting post:', error);
+    return null;
+  }
+};
+
+export const deletePost = (postId) => {
+  try {
+    db.runSync('DELETE FROM posts WHERE id = ?', [postId]);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ===== COMMENT FUNCTIONS =====
+export const addComment = (postId, username, comment) => {
+  try {
+    db.runSync(
+      'INSERT INTO comments (post_id, username, comment) VALUES (?, ?, ?)',
+      [postId, username, comment]
+    );
+    return { success: true };
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getCommentsByPostId = (postId) => {
+  try {
+    return db.getAllSync(
+      'SELECT * FROM comments WHERE post_id = ? ORDER BY timestamp ASC',
+      [postId]
+    );
+  } catch (error) {
+    console.error('Error getting comments:', error);
+    return [];
+  }
+};
+
+export const deleteComment = (commentId) => {
+  try {
+    db.runSync('DELETE FROM comments WHERE id = ?', [commentId]);
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ===== UTILITY FUNCTIONS =====
 export const clearAllData = () => {
   try {
     db.runSync('DELETE FROM users');
     db.runSync('DELETE FROM messages');
+    db.runSync('DELETE FROM posts');
+    db.runSync('DELETE FROM comments');
     return { success: true };
   } catch (error) {
     console.error('Error clearing data:', error);
@@ -245,6 +348,8 @@ export const dropAllTables = () => {
   try {
     db.execSync('DROP TABLE IF EXISTS users');
     db.execSync('DROP TABLE IF EXISTS messages');
+    db.execSync('DROP TABLE IF EXISTS posts');
+    db.execSync('DROP TABLE IF EXISTS comments');
     return { success: true };
   } catch (error) {
     console.error('Error dropping tables:', error);
