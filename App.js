@@ -7,6 +7,8 @@ import LoginScreen from './LoginScreen';
 import UserListScreen from './UserListScreen';
 import ChatScreen from './ChatScreen';
 import FeedScreen from './FeedScreen';
+import AboutScreen from './AboutScreen'; 
+
 import { createTables } from './database';
 
 const Stack = createNativeStackNavigator();
@@ -24,6 +26,7 @@ export default function App() {
         <Stack.Screen name="UserList" component={UserListScreen} />
         <Stack.Screen name="Chat" component={ChatScreen} />
         <Stack.Screen name="Feed" component={FeedScreen} />
+        <Stack.Screen name="About" component={AboutScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
