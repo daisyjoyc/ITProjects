@@ -10,7 +10,9 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import {
   getAllPosts,
@@ -20,26 +22,84 @@ import {
   getCommentsByPostId,
   deleteComment,
   getUserWithProfilePic,
+  addPostReaction,
+  removePostReaction,
+  getPostReactions,
+  getUserReactionForPost,
+  createStory,
+  getAllStories,
+  deleteOldStories,
 } from './database';
+import db from './database';
+import { useTheme } from './ThemeContext';
+
+const { width } = Dimensions.get('window');
 
 export default function FeedScreen({ route, navigation }) {
   const { currentUser } = route.params;
   const [posts, setPosts] = useState([]);
+  const [stories, setStories] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [caption, setCaption] = useState('');
   const [commentModalVisible, setCommentModalVisible] = useState(false);
+  const [storyModalVisible, setStoryModalVisible] = useState(false);
   const [selectedPost, setSelectedPost] = useState(null);
+  const [selectedStory, setSelectedStory] = useState(null);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
+  const [postReactions, setPostReactions] = useState({});
+  const { theme, isDark } = useTheme();
+
+  const reactions = ['❤️', '😂', '😮', '😢', '😍', '🔥'];
 
   useEffect(() => {
     loadPosts();
+    loadStories();
+    deleteOldStories();
+    
+    const interval = setInterval(() => {
+      loadPosts();
+      loadStories();
+      deleteOldStories();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const loadPosts = () => {
     const allPosts = getAllPosts();
     setPosts(allPosts);
+    
+    // Load reactions for all posts
+    const reactionsData = {};
+    allPosts.forEach(post => {
+      const reactions = getPostReactions(post.id);
+      reactionsData[post.id] = reactions;
+    });
+    setPostReactions(reactionsData);
+  };
+
+  const loadStories = () => {
+    const allStories = getAllStories();
+    
+    // Group stories by user
+    const groupedStories = {};
+    allStories.forEach(story => {
+      if (!groupedStories[story.username]) {
+        groupedStories[story.username] = [];
+      }
+      groupedStories[story.username].push(story);
+    });
+    
+    // Convert to array with latest story per user
+    const storiesArray = Object.keys(groupedStories).map(username => ({
+      username,
+      stories: groupedStories[username],
+      latestStory: groupedStories[username][0],
+    }));
+    
+    setStories(storiesArray);
   };
 
   const pickImage = async () => {
@@ -60,6 +120,30 @@ export default function FeedScreen({ route, navigation }) {
     if (!result.canceled) {
       setSelectedImage(result.assets[0].uri);
       setModalVisible(true);
+    }
+  };
+
+  const pickStoryImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'We need camera roll permissions');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [9, 16],
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      const createResult = createStory(currentUser, result.assets[0].uri);
+      if (createResult.success) {
+        Alert.alert('Success', 'Story added!');
+        loadStories();
+      }
     }
   };
 
@@ -88,7 +172,7 @@ export default function FeedScreen({ route, navigation }) {
       return;
     }
 
-    Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
+    Alert.alert('Delete Post', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -102,6 +186,20 @@ export default function FeedScreen({ route, navigation }) {
         },
       },
     ]);
+  };
+
+  const handleReaction = (postId, reaction) => {
+    const userReaction = getUserReactionForPost(postId, currentUser);
+    
+    if (userReaction && userReaction.reaction === reaction) {
+      // Remove reaction if same
+      removePostReaction(postId, currentUser);
+    } else {
+      // Add or update reaction
+      addPostReaction(postId, currentUser, reaction);
+    }
+    
+    loadPosts();
   };
 
   const openComments = (post) => {
@@ -149,6 +247,11 @@ export default function FeedScreen({ route, navigation }) {
     ]);
   };
 
+  const openStory = (storyData) => {
+    setSelectedStory(storyData);
+    setStoryModalVisible(true);
+  };
+
   const getProfileImage = (username) => {
     const userData = getUserWithProfilePic(username);
     if (userData?.profile_pic && userData.profile_pic.startsWith('file://')) {
@@ -157,80 +260,210 @@ export default function FeedScreen({ route, navigation }) {
     return require('./assets/adaptive-icon.png');
   };
 
-  const renderPost = ({ item }) => (
-    <View style={styles.postCard}>
-      {/* Post Header */}
-      <View style={styles.postHeader}>
-        <Image source={getProfileImage(item.username)} style={styles.postAvatar} />
-        <View style={styles.postHeaderText}>
-          <Text style={styles.postUsername}>{item.username}</Text>
-          <Text style={styles.postTime}>
-            {new Date(item.timestamp).toLocaleString()}
-          </Text>
-        </View>
-        {item.username === currentUser && (
-          <TouchableOpacity onPress={() => handleDeletePost(item.id, item.username)}>
-            <Text style={styles.deleteButton}>🗑️</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+  const getReactionCounts = (postId) => {
+    const reactions = postReactions[postId] || [];
+    const counts = {};
+    reactions.forEach(r => {
+      counts[r.reaction] = (counts[r.reaction] || 0) + 1;
+    });
+    return counts;
+  };
 
-      {/* Post Image */}
-      <Image source={{ uri: item.image_uri }} style={styles.postImage} />
+  const getUserReaction = (postId) => {
+    const reaction = getUserReactionForPost(postId, currentUser);
+    return reaction?.reaction || null;
+  };
 
-      {/* Post Caption */}
-      {item.caption ? (
-        <Text style={styles.postCaption}>{item.caption}</Text>
-      ) : null}
-
-      {/* Comment Button */}
-      <TouchableOpacity
-        style={styles.commentButton}
-        onPress={() => openComments(item)}
+  const renderStory = ({ item }) => (
+    <TouchableOpacity
+      style={styles.storyContainer}
+      onPress={() => openStory(item)}
+    >
+      <LinearGradient
+        colors={['#f09433', '#e6683c', '#dc2743', '#cc2366', '#bc1888']}
+        style={styles.storyGradientBorder}
       >
-        <Text style={styles.commentButtonText}>💬 Comments</Text>
-      </TouchableOpacity>
-    </View>
+        <View style={[styles.storyInner, { backgroundColor: theme.background }]}>
+          <Image
+            source={getProfileImage(item.username)}
+            style={styles.storyImage}
+          />
+        </View>
+      </LinearGradient>
+      <Text style={[styles.storyUsername, { color: theme.text }]} numberOfLines={1}>
+        {item.username === currentUser ? 'You' : item.username}
+      </Text>
+    </TouchableOpacity>
   );
+
+  const renderPost = ({ item }) => {
+    const reactionCounts = getReactionCounts(item.id);
+    const userReaction = getUserReaction(item.id);
+    const totalReactions = Object.values(reactionCounts).reduce((a, b) => a + b, 0);
+
+    return (
+      <View style={[styles.postCard, { backgroundColor: theme.cardBackground }]}>
+        {/* Post Header */}
+        <View style={styles.postHeader}>
+          <Image source={getProfileImage(item.username)} style={styles.postAvatar} />
+          <View style={styles.postHeaderText}>
+            <Text style={[styles.postUsername, { color: theme.text }]}>
+              {item.username}
+            </Text>
+            <Text style={[styles.postTime, { color: theme.secondaryText }]}>
+              {new Date(item.timestamp).toLocaleString()}
+            </Text>
+          </View>
+          {item.username === currentUser && (
+            <TouchableOpacity onPress={() => handleDeletePost(item.id, item.username)}>
+              <Text style={styles.deleteButton}>🗑️</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Post Image */}
+        <Image source={{ uri: item.image_uri }} style={styles.postImage} />
+
+        {/* Reactions Bar */}
+        <View style={[styles.reactionsBar, { borderBottomColor: theme.border }]}>
+          <View style={styles.reactionButtons}>
+            {reactions.map((reaction) => (
+              <TouchableOpacity
+                key={reaction}
+                style={[
+                  styles.reactionBtn,
+                  userReaction === reaction && styles.reactionBtnActive,
+                ]}
+                onPress={() => handleReaction(item.id, reaction)}
+              >
+                <Text style={styles.reactionEmoji}>{reaction}</Text>
+                {reactionCounts[reaction] && (
+                  <Text style={[styles.reactionCount, { color: theme.secondaryText }]}>
+                    {reactionCounts[reaction]}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+          
+          {totalReactions > 0 && (
+            <Text style={[styles.totalReactions, { color: theme.secondaryText }]}>
+              {totalReactions} {totalReactions === 1 ? 'reaction' : 'reactions'}
+            </Text>
+          )}
+        </View>
+
+        {/* Post Caption */}
+        {item.caption ? (
+          <View style={styles.captionContainer}>
+            <Text style={[styles.captionUsername, { color: theme.text }]}>
+              {item.username}
+            </Text>
+            <Text style={[styles.postCaption, { color: theme.text }]}> {item.caption}</Text>
+          </View>
+        ) : null}
+
+        {/* Comment Button */}
+        <TouchableOpacity
+          style={styles.commentButton}
+          onPress={() => openComments(item)}
+        >
+          <Text style={[styles.commentButtonText, { color: theme.primary }]}>
+            💬 View Comments
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   const renderComment = ({ item }) => (
     <View style={styles.commentItem}>
       <Image source={getProfileImage(item.username)} style={styles.commentAvatar} />
       <View style={styles.commentContent}>
-        <Text style={styles.commentUsername}>{item.username}</Text>
-        <Text style={styles.commentText}>{item.comment}</Text>
-        <Text style={styles.commentTime}>
+        <Text style={[styles.commentUsername, { color: theme.text }]}>
+          {item.username}
+        </Text>
+        <Text style={[styles.commentText, { color: theme.text }]}>{item.comment}</Text>
+        <Text style={[styles.commentTime, { color: theme.secondaryText }]}>
           {new Date(item.timestamp).toLocaleTimeString()}
         </Text>
       </View>
       {item.username === currentUser && (
-        <TouchableOpacity
-          onPress={() => handleDeleteComment(item.id, item.username)}
-        >
-          <Text style={styles.deleteCommentButton}>✕</Text>
+        <TouchableOpacity onPress={() => handleDeleteComment(item.id, item.username)}>
+          <Text style={[styles.deleteCommentButton, { color: theme.error }]}>✕</Text>
         </TouchableOpacity>
       )}
     </View>
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.background }]}>
+      <LinearGradient
+        colors={isDark ? ['#2193b0', '#6dd5ed'] : ['#fff1eb', '#ace0f9', '#ffecd2', '#e0c3fc']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.backgroundGradient}
+      >
+        {/* Decorative Shapes */}
+        <View style={[styles.decorShape, styles.shape1, { backgroundColor: isDark ? 'rgba(109,213,237,0.15)' : 'rgba(255,182,193,0.35)' }]} />
+        <View style={[styles.decorShape, styles.shape2, { backgroundColor: isDark ? 'rgba(109,213,237,0.12)' : 'rgba(224,195,252,0.3)' }]} />
+        <View style={[styles.decorShape, styles.shape3, { backgroundColor: isDark ? 'rgba(109,213,237,0.1)' : 'rgba(172,224,249,0.35)' }]} />
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>Back</Text>
+      <LinearGradient
+        colors={isDark ? ['#1C1C1E', '#000000'] : ['#FFFFFF', '#F8F9FA']}
+        style={styles.header}
+      >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonContainer}>
+          <LinearGradient
+            colors={['#667eea', '#764ba2']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.backButtonGradient}
+          >
+            <Text style={styles.backButton}>x</Text>
+          </LinearGradient>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Feed</Text>
-        <TouchableOpacity style={styles.createButton} onPress={pickImage}>
-          <Text style={styles.createButtonText}>+ Post</Text>
+        <Text style={[styles.headerTitle, { color: theme.text }]}>Feed</Text>
+        <TouchableOpacity style={[styles.createButton, { backgroundColor: theme.primary }]} onPress={pickImage}>
+          <Text style={styles.createButtonText}>+</Text>
         </TouchableOpacity>
+      </LinearGradient>
+
+      {/* Stories Section */}
+      <View style={styles.storiesSection}>
+        <Text style={[styles.sectionTitle, { color: theme.text }]}>Stories</Text>
+        <View style={styles.storiesContainer}>
+          {/* Add Story Button */}
+          <TouchableOpacity style={styles.addStoryContainer} onPress={pickStoryImage}>
+            <LinearGradient
+              colors={[theme.primary, theme.primaryLight]}
+              style={styles.addStoryGradient}
+            >
+              <Text style={styles.addStoryIcon}>+</Text>
+            </LinearGradient>
+            <Text style={[styles.storyUsername, { color: theme.text }]}>Add Story</Text>
+          </TouchableOpacity>
+
+          {/* Stories List */}
+          <FlatList
+            data={stories}
+            renderItem={renderStory}
+            keyExtractor={(item) => item.username}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.storiesList}
+          />
+        </View>
       </View>
 
       {/* Posts List */}
       {posts.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No posts yet</Text>
-          <Text style={styles.emptySubtext}>Be the first to create a post!</Text>
+          <Text style={styles.emptyIcon}>📸</Text>
+          <Text style={[styles.emptyText, { color: theme.text }]}>No posts yet</Text>
+          <Text style={[styles.emptySubtext, { color: theme.secondaryText }]}>
+            Be the first to create a post!
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -248,17 +481,25 @@ export default function FeedScreen({ route, navigation }) {
         transparent={true}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Create Post</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: theme.overlay }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Create Post</Text>
 
             {selectedImage && (
               <Image source={{ uri: selectedImage }} style={styles.previewImage} />
             )}
 
             <TextInput
-              style={styles.captionInput}
+              style={[
+                styles.captionInput,
+                {
+                  backgroundColor: theme.secondaryBackground,
+                  color: theme.text,
+                  borderColor: theme.border,
+                },
+              ]}
               placeholder="Write a caption..."
+              placeholderTextColor={theme.placeholderText}
               value={caption}
               onChangeText={setCaption}
               multiline
@@ -267,21 +508,23 @@ export default function FeedScreen({ route, navigation }) {
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
-                style={styles.cancelButton}
+                style={[styles.cancelButton, { backgroundColor: theme.secondaryBackground }]}
                 onPress={() => {
                   setModalVisible(false);
                   setSelectedImage(null);
                   setCaption('');
                 }}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={[styles.cancelButtonText, { color: theme.text }]}>Cancel</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.postButton}
-                onPress={handleCreatePost}
-              >
-                <Text style={styles.postButtonText}>Post</Text>
+              <TouchableOpacity onPress={handleCreatePost}>
+                <LinearGradient
+                  colors={isDark ? ['#0A84FF', '#5E5CE6'] : ['#007AFF', '#5856D6']}
+                  style={styles.postButton}
+                >
+                  <Text style={styles.postButtonText}>Post</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
@@ -295,12 +538,12 @@ export default function FeedScreen({ route, navigation }) {
         transparent={true}
         onRequestClose={() => setCommentModalVisible(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.commentModalContent}>
+        <View style={[styles.modalOverlay, { backgroundColor: theme.overlay }]}>
+          <View style={[styles.commentModalContent, { backgroundColor: theme.cardBackground }]}>
             <View style={styles.commentModalHeader}>
-              <Text style={styles.modalTitle}>Comments</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>Comments</Text>
               <TouchableOpacity onPress={() => setCommentModalVisible(false)}>
-                <Text style={styles.closeButton}>✕</Text>
+                <Text style={[styles.closeButton, { color: theme.text }]}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -310,26 +553,143 @@ export default function FeedScreen({ route, navigation }) {
               keyExtractor={(item) => item.id.toString()}
               style={styles.commentsList}
               ListEmptyComponent={
-                <Text style={styles.noComments}>No comments yet</Text>
+                <Text style={[styles.noComments, { color: theme.secondaryText }]}>
+                  No comments yet
+                </Text>
               }
             />
 
-            <View style={styles.commentInputContainer}>
+            <View style={[styles.commentInputContainer, { borderTopColor: theme.border }]}>
               <TextInput
-                style={styles.commentInput}
+                style={[
+                  styles.commentInput,
+                  {
+                    backgroundColor: theme.secondaryBackground,
+                    color: theme.text,
+                    borderColor: theme.border,
+                  },
+                ]}
                 placeholder="Add a comment..."
+                placeholderTextColor={theme.placeholderText}
                 value={newComment}
                 onChangeText={setNewComment}
                 multiline
               />
-              <TouchableOpacity
-                style={styles.sendCommentButton}
-                onPress={handleAddComment}
-              >
-                <Text style={styles.sendCommentText}>Send</Text>
+              <TouchableOpacity onPress={handleAddComment}>
+                <LinearGradient
+                  colors={isDark ? ['#0A84FF', '#5E5CE6'] : ['#007AFF', '#5856D6']}
+                  style={styles.sendCommentButton}
+                >
+                  <Text style={styles.sendCommentText}>➤</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+      </LinearGradient>
+
+      {/* Story Viewer Modal */}
+      <Modal
+        visible={storyModalVisible}
+        animationType="fade"
+        transparent={false}
+        onRequestClose={() => setStoryModalVisible(false)}
+      >
+        <View style={[styles.storyViewer, { backgroundColor: '#000000' }]}>
+          {selectedStory && (
+            <>
+              <TouchableOpacity
+                style={styles.storyCloseButton}
+                onPress={() => setStoryModalVisible(false)}
+              >
+                <Text style={styles.storyCloseText}>✕</Text>
+              </TouchableOpacity>
+              
+              <View style={styles.storyHeader}>
+                <Image
+                  source={getProfileImage(selectedStory.username)}
+                  style={styles.storyHeaderAvatar}
+                />
+                <Text style={styles.storyHeaderUsername}>
+                  {selectedStory.username}
+                </Text>
+              </View>
+
+              <Image
+                source={{ uri: selectedStory.latestStory.image_uri }}
+                style={styles.storyFullImage}
+                resizeMode="contain"
+              />
+
+              {/* Action Buttons Row */}
+              <View style={styles.storyActionsRow}>
+                {/* Delete Button (only for own stories) */}
+                {selectedStory.username === currentUser && (
+                  <TouchableOpacity
+                    style={styles.storyActionButton}
+                    onPress={() => {
+                      Alert.alert('Delete Story', 'Are you sure you want to delete this story?', [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Delete',
+                          style: 'destructive',
+                          onPress: () => {
+                            db.runSync('DELETE FROM stories WHERE id = ?', [selectedStory.latestStory.id]);
+                            setStoryModalVisible(false);
+                            loadStories();
+                            Alert.alert('Success', 'Story deleted successfully');
+                          },
+                        },
+                      ]);
+                    }}
+                  >
+                    <LinearGradient
+                      colors={['#ff6b6b', '#ee5a6f']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.storyActionGradient}
+                    >
+                      <Text style={styles.storyActionEmoji}>🗑️</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+
+                {/* Reaction Buttons */}
+                <TouchableOpacity
+                  style={styles.storyActionButton}
+                  onPress={() => {
+                    Alert.alert('Reaction', '😂 HAHA reaction sent!');
+                  }}
+                >
+                  <LinearGradient
+                    colors={['#ffd93d', '#f6c23e']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.storyActionGradient}
+                  >
+                    <Text style={styles.storyActionEmoji}>😂</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.storyActionButton}
+                  onPress={() => {
+                    Alert.alert('Reaction', '❤️ HEART reaction sent!');
+                  }}
+                >
+                  <LinearGradient
+                    colors={['#ff6b9d', '#f06292']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.storyActionGradient}
+                  >
+                    <Text style={styles.storyActionEmoji}>❤️</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
       </Modal>
     </View>
@@ -339,51 +699,161 @@ export default function FeedScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+  },
+  backgroundGradient: {
+    flex: 1,
+  },
+  decorShape: {
+    position: 'absolute',
+    borderRadius: 1000,
+  },
+  shape1: {
+    width: 280,
+    height: 280,
+    top: -120,
+    left: -90,
+  },
+  shape2: {
+    width: 200,
+    height: 200,
+    bottom: 100,
+    right: -70,
+  },
+  shape3: {
+    width: 160,
+    height: 160,
+    top: '35%',
+    left: -50,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+  },
+  backButtonContainer: {
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  backButtonGradient: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   backButton: {
-    fontSize: 16,
-    color: '#007AFF',
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFF',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
   },
   createButton: {
-    backgroundColor: '#007AFF',
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   createButtonText: {
     color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  storiesSection: {
+    marginBottom: 10,
+    paddingVertical: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    paddingHorizontal: 15,
+    marginBottom: 8,
+  },
+  storiesContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 15,
+  },
+  storiesList: {
+    flex: 1,
+  },
+  storiesScroll: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  addStoryContainer: {
+    alignItems: 'center',
+    marginRight: 12,
+    width: 70,
+  },
+  addStoryGradient: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  addStoryIcon: {
+    fontSize: 28,
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  storyContainer: {
+    alignItems: 'center',
+    marginRight: 12,
+    width: 70,
+  },
+  storyGradientBorder: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 5,
+  },
+  storyInner: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  storyImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
+  storyUsername: {
+    fontSize: 12,
+    textAlign: 'center',
   },
   postsList: {
-    padding: 10,
+    paddingHorizontal: 10,
+    paddingBottom: 20,
   },
   postCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 15,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   postHeader: {
     flexDirection: 'row',
@@ -402,11 +872,9 @@ const styles = StyleSheet.create({
   postUsername: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
   },
   postTime: {
     fontSize: 12,
-    color: '#999',
     marginTop: 2,
   },
   deleteButton: {
@@ -415,23 +883,63 @@ const styles = StyleSheet.create({
   },
   postImage: {
     width: '100%',
-    height: 300,
+    height: 350,
     backgroundColor: '#f0f0f0',
   },
-  postCaption: {
+  reactionsBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 12,
+    borderBottomWidth: 1,
+  },
+  reactionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  reactionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 15,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  reactionBtnActive: {
+    backgroundColor: 'rgba(0, 122, 255, 0.2)',
+  },
+  reactionEmoji: {
+    fontSize: 18,
+  },
+  reactionCount: {
+    fontSize: 12,
+    marginLeft: 4,
+    fontWeight: '600',
+  },
+  totalReactions: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  captionContainer: {
+    flexDirection: 'row',
+    padding: 12,
+    paddingTop: 8,
+  },
+  captionUsername: {
+    fontWeight: '600',
     fontSize: 15,
-    color: '#333',
+  },
+  postCaption: {
+    fontSize: 15,
+    flex: 1,
   },
   commentButton: {
     padding: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    paddingTop: 8,
   },
   commentButtonText: {
     fontSize: 14,
-    color: '#007AFF',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   emptyContainer: {
     flex: 1,
@@ -439,88 +947,81 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 40,
   },
+  emptyIcon: {
+    fontSize: 60,
+    marginBottom: 15,
+  },
   emptyText: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#666',
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 16,
-    color: '#999',
     textAlign: 'center',
   },
-  modalContainer: {
+  modalOverlay: {
     flex: 1,
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
   },
   modalContent: {
-    backgroundColor: 'white',
-    margin: 20,
-    borderRadius: 15,
+    borderRadius: 20,
     padding: 20,
     maxHeight: '80%',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
     marginBottom: 15,
     textAlign: 'center',
   },
   previewImage: {
     width: '100%',
     height: 250,
-    borderRadius: 10,
+    borderRadius: 15,
     marginBottom: 15,
   },
   captionInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
     fontSize: 16,
     minHeight: 80,
     marginBottom: 15,
     textAlignVertical: 'top',
+    borderWidth: 1,
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 10,
   },
   cancelButton: {
     flex: 1,
     padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#f0f0f0',
-    marginRight: 10,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   cancelButtonText: {
-    textAlign: 'center',
     fontSize: 16,
     fontWeight: '600',
-    color: '#666',
   },
   postButton: {
     flex: 1,
     padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    alignItems: 'center',
   },
   postButtonText: {
-    textAlign: 'center',
+    color: 'white',
     fontSize: 16,
     fontWeight: '600',
-    color: 'white',
   },
   commentModalContent: {
-    backgroundColor: 'white',
-    margin: 20,
-    marginTop: 60,
-    borderRadius: 15,
+    borderRadius: 20,
     padding: 20,
-    height: '80%',
+    height: '75%',
+    marginTop: 'auto',
   },
   commentModalHeader: {
     flexDirection: 'row',
@@ -530,7 +1031,6 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     fontSize: 24,
-    color: '#666',
   },
   commentsList: {
     flex: 1,
@@ -540,7 +1040,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: 'rgba(128, 128, 128, 0.1)',
   },
   commentAvatar: {
     width: 35,
@@ -554,55 +1054,123 @@ const styles = StyleSheet.create({
   commentUsername: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
     marginBottom: 4,
   },
   commentText: {
     fontSize: 14,
-    color: '#333',
     marginBottom: 4,
   },
   commentTime: {
     fontSize: 11,
-    color: '#999',
   },
   deleteCommentButton: {
     fontSize: 18,
-    color: '#FF3B30',
     padding: 5,
   },
   noComments: {
     textAlign: 'center',
-    color: '#999',
     padding: 20,
     fontSize: 14,
   },
   commentInputContainer: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
     paddingTop: 10,
+    gap: 10,
   },
   commentInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 20,
     paddingHorizontal: 15,
     paddingVertical: 10,
-    marginRight: 10,
     fontSize: 14,
     maxHeight: 80,
+    borderWidth: 1,
   },
   sendCommentButton: {
-    backgroundColor: '#007AFF',
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    paddingHorizontal: 20,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   sendCommentText: {
     color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  storyViewer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  storyCloseButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  storyCloseText: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  storyHeader: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  storyHeaderAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  storyHeaderUsername: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  storyFullImage: {
+    width: width,
+    height: '100%',
+  },
+  storyActionsRow: {
+    position: 'absolute',
+    top: 100,
+    right: 20,
+    flexDirection: 'column',
+    gap: 12,
+    alignItems: 'center',
+  },
+  storyActionButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  storyActionGradient: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  storyActionEmoji: {
+    fontSize: 22,
   },
 });

@@ -1,25 +1,27 @@
 {
   "expo": {
-    "name": "ProjectApp",
-    "slug": "ProjectApp",
+    "name": "CUTAMORA_D",
+    "slug": "cutamora-d",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/daisy-icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFB6C1"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cutamora.app"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/daisy-adaptive-icon.png",
+        "backgroundColor": "#FFB6C1"
       },
+      "package": "com.cutamora.app",
       "edgeToEdgeEnabled": true
     },
     "web": {
@@ -27,6 +29,11 @@
     },
     "plugins": [
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "10253b0e-8761-4e06-be91-5c88a8778440"
+      }
+    }
   }
 }
