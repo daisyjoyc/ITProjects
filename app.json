@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ChatAppSQLite",
-    "slug": "ChatAppSQLite",
+    "name": "Autentico_MJ",
+    "slug": "Autentico_MJ",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,7 +21,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.daisyjoy.ChatAppSQLite"
+      "package": "com.daisyjoy.autenticomj"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,7 +31,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "3f767080-c746-4351-abe3-844224242c3a"
+        "projectId": "a9663903-763b-495c-bd6f-b06b5604925c"
       }
     }
   }
