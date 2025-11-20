@@ -39,6 +39,10 @@ export default function UserListScreen({ route, navigation }) {
     });
   };
 
+  const handleAbout = () => {
+    navigation.navigate('About');
+  };
+
   const handleUserPress = (selectedUser) => {
     navigation.navigate('Chat', {
       currentUser: currentUser,
@@ -104,6 +108,9 @@ export default function UserListScreen({ route, navigation }) {
             <Text style={styles.headerSubtitle}>Logged in as: {currentUser}</Text>
           </View>
           <View style={styles.headerButtons}>
+            <TouchableOpacity style={styles.aboutButton} onPress={handleAbout}>
+              <Text style={styles.aboutText}>About</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.feedButton} onPress={handleFeed}>
               <Text style={styles.feedText}>Feed</Text>
             </TouchableOpacity>
@@ -164,6 +171,17 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: 'row',
     gap: 10,
+  },
+  aboutButton: {
+    backgroundColor: '#5856D6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  aboutText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
   feedButton: {
     backgroundColor: '#34C759',

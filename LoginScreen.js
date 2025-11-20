@@ -113,7 +113,7 @@ export default function LoginScreen({ navigation }) {
                   resizeMode="cover"
                 />
                 <Text style={styles.name}>Ma. Janen C. Autentico</Text>
-                <Text style={styles.bio}>"Adventure is out there, and so am I"</Text>
+                <Text style={styles.bio}>"My name is Ma. Janen Autentico, 21 years old. I am currently studying at Trinidad Municipal College taking a bachelor of Science in Information Technology. And I am someone who values hard work and consistency. I focus on doing my tasks well, learning from challenges, and improving little by little every day."</Text>
               </View>
 
               {/* Student Info */}
@@ -124,19 +124,6 @@ export default function LoginScreen({ navigation }) {
                 <Text style={styles.infoText}>Address: La Victoria, Trinidad, Bohol</Text>
                 <Text style={styles.infoText}>Course & Block:  BSIT 3 - Block 3</Text>
                 <Text style={styles.infoText}>Subject: IT Elective 1</Text>
-              </View>
-
-              {/* App Features */}
-              <View style={styles.infoSection}>
-                <Text style={styles.sectionTitle}>App Features</Text>
-                <Text style={styles.feature}>• User Registration with Profile Picture</Text>
-                <Text style={styles.feature}>• Secure Login System</Text>
-                <Text style={styles.feature}>• Real-time One-on-One Chat</Text>
-                <Text style={styles.feature}>• Personal Feed with Posts</Text>
-                <Text style={styles.feature}>• View All Registered Users</Text>
-                <Text style={styles.feature}>• Local SQLite Database (Works Offline)</Text>
-                <Text style={styles.feature}>• Clean & Responsive Design</Text>
-                <Text style={styles.feature}>• Profile Picture Upload & Display</Text>
               </View>
             </ScrollView>
 

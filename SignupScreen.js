@@ -76,12 +76,12 @@ export default function SignupScreen({ navigation }) {
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
       >
-      <View style={styles.formContainer}>
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Sign up to get started</Text>
+        <View style={styles.formContainer}>
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.subtitle}>Sign up to get started</Text>
 
-        {/* Profile Picture Selection */}
-        <View style={styles.profilePicContainer}>
+          {/* Profile Picture Selection */}
+          <View style={styles.profilePicContainer}>
           <TouchableOpacity 
             style={styles.profilePicButton} 
             onPress={pickImage}
